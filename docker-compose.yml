@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: billing_engine_db
+    environment:
+      POSTGRES_USER: billing
+      POSTGRES_PASSWORD: billing_secret
+      POSTGRES_DB: billing_engine
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U billing -d billing_engine"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  db_test:
+    image: postgres:16-alpine
+    container_name: billing_engine_db_test
+    environment:
+      POSTGRES_USER: billing_test
+      POSTGRES_PASSWORD: billing_test_secret
+      POSTGRES_DB: billing_engine_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data   # In-memory for fast tests
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U billing_test -d billing_engine_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
