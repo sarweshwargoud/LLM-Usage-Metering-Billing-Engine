@@ -1,69 +1,69 @@
 """
-SQLAlchemy async engine and session factory.
+SQLAlchemy engine and session factory.
 
 Design decisions:
-- Uses asyncpg driver for async I/O.
-- Sync engine exposed only for Alembic migrations.
-- Session factory is used via FastAPI Depends in the API layer (Phase 3).
+- Synchronous engine and SessionLocal used by FastAPI dependency injection and background services.
+- Connection pooling with pre-ping validation.
+- Session factory is used via FastAPI Depends(get_db) in the API layer.
 """
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import Generator
+from contextlib import contextmanager
 
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
 from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
 
 
-def _build_async_engine():
-    settings = get_settings()
-    return create_async_engine(
-        settings.database_url,
-        echo=settings.debug,
-        pool_pre_ping=True,       # Re-validate connections before use
-        pool_size=10,
-        max_overflow=20,
-        pool_recycle=300,         # Recycle connections every 5 min
-    )
-
-
 def _build_sync_engine():
-    """Sync engine — used only by Alembic, never by the application."""
     settings = get_settings()
     return create_engine(
         settings.database_url_sync,
         echo=settings.debug,
         pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_recycle=300,
     )
 
 
-async_engine = _build_async_engine()
 sync_engine = _build_sync_engine()
 
-AsyncSessionLocal = async_sessionmaker(
-    bind=async_engine,
-    class_=AsyncSession,
+SessionLocal = sessionmaker(
+    bind=sync_engine,
+    class_=Session,
     expire_on_commit=False,
     autoflush=False,
     autocommit=False,
 )
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+def get_db() -> Generator[Session, None, None]:
     """
-    FastAPI dependency that yields an async DB session.
-    Always closes the session after the request, even on exception.
+    FastAPI dependency that yields a transactional DB session.
+    Always rolls back on exception and closes the session after request.
     """
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+    session = SessionLocal()
+    try:
+        yield session
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+@contextmanager
+def get_db_context() -> Generator[Session, None, None]:
+    """Context manager for background jobs and CLI scripts."""
+    session = SessionLocal()
+    try:
+        yield session
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
