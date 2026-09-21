@@ -1,5 +1,5 @@
 # LLM Usage Metering & Billing Engine
-
+https://deepwiki.com/sarweshwargoud/LLM-Usage-Metering-Billing-Engine
 Production-grade, highly reliable usage metering, quota enforcement, and billing engine for LLM APIs built with **FastAPI**, **PostgreSQL**, **SQLAlchemy**, and **Stripe**.
 
 ---
